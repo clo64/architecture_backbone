@@ -12,7 +12,7 @@ class Nano_Server:
 
         #UDP Receiver 
         self.received_data_queue = received_data_queue
-        self.UDP_Receive_PORT = 18886
+        self.UDP_Receive_PORT = 18889
         self.receive_serversocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.receive_serversocket.bind((self.ip_addr, self.UDP_Receive_PORT))
 

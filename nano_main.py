@@ -146,10 +146,14 @@ def inference_machine(nano_serv, cross_process_signal, cross_process_data):
             horizontal_heatmap = np.reshape(horizontal_heatmap, (1,32,57,28,1))
             vertical_heatmap = np.reshape(vertical_heatmap, (1,32,37,28,1))
             model_input = ((horizontal_heatmap, vertical_heatmap), ())
+            start = time.time()
             predictions = loaded_model.predict(model_input)
+            end = time.time()
+            print(end-start)
+            print(predictions)
             nano_serv.send_data_queue.put(predictions)
             print('inference done')
-           
+        
         else:
             #if less than 32 items we want to reuse the old heatmap_list and simply knock off the old entries and 
             #slice in the new ones. 
@@ -163,7 +167,10 @@ def inference_machine(nano_serv, cross_process_signal, cross_process_data):
             horizontal_heatmap = np.reshape(horizontal_heatmap, (1,32,57,28,1))
             vertical_heatmap = np.reshape(vertical_heatmap, (1,32,37,28,1))
             model_input = ((horizontal_heatmap, vertical_heatmap), ())
+            start = time.time()
             predictions = loaded_model.predict(model_input)
+            end = time.time()
+            print(end-start)
             nano_serv.send_data_queue.put(predictions)  
             print('inference done')
         
