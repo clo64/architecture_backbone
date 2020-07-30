@@ -1,7 +1,7 @@
 import nano_server as ns
-from keras.models import model_from_json
+
 import numpy as np
-import tensorflow as tf
+
 import socket
 import queue as Qthread
 from collections import deque
@@ -13,8 +13,8 @@ import time
 
 def red_blue_buffer(nano_serv, cross_process_signal, cross_process_data):
 
-    received_data_queue_red = deque(maxlen=32)
-    received_data_queue_blue = deque(maxlen=32)
+    #received_data_queue_red = deque(maxlen=32)
+    #received_data_queue_blue = deque(maxlen=32)
     
     red_active = True
     blue_active = False
@@ -66,7 +66,7 @@ def red_blue_buffer(nano_serv, cross_process_signal, cross_process_data):
 
                 print("red buffer")
 
-                received_data_queue_red.append(received_data_queue.get(block=True, timeout=3))
+                received_data_queue_red.appendleft(received_data_queue.get(block=True, timeout=3))
 
                 #logic to send the first buffer when it's full
                 if (len(received_data_queue_red) == 32) and first_capture:
@@ -95,7 +95,7 @@ def red_blue_buffer(nano_serv, cross_process_signal, cross_process_data):
             
             try:
 
-                received_data_queue_blue.append(received_data_queue.get(block=True, timeout=3))
+                received_data_queue_blue.appendleft(received_data_queue.get(block=True, timeout=3))
     
             except Qthread.Empty:
 
@@ -112,31 +112,73 @@ def red_blue_buffer(nano_serv, cross_process_signal, cross_process_data):
 
 def inference_machine(nano_serv, cross_process_signal, cross_process_data):
 
+    from keras.models import model_from_json
+    import tensorflow as tf
+
+    
+    physical_devices = tf.config.list_physical_devices('GPU') 
+    try: 
+        tf.config.experimental.set_memory_growth(physical_devices[0], True) 
+        assert tf.config.experimental.get_memory_growth(physical_devices[0]) 
+    except: 
+        # Invalid device or cannot modify virtual devices once initialized.
+        print("init device cannot modify") 
+        pass
+    
+
+    json_file = open('saved_model.json', 'r')
+    loaded_model_json = json_file.read()
+    json_file.close()
+    loaded_model = model_from_json(loaded_model_json)
+    loaded_model.load_weights('saved_model.h5')
+    print('Loaded model from disk.')
+
     sender_thread = threading.Thread(target=nano_serv.send_data, args=())
     sender_thread.start()
-
-    heatmap_list = []
-    i = 0
-
-    print("Ill run inference")
+    
     log_File = open('log_File.txt', 'w')
-
+    once = True
     while True:
    
         latest_frames = cross_process_data.get(block=True)
         cross_process_data.task_done()
         #capture = passTest.pop()
         
-        
         #if this is the first deque sent over then it will be 32 in length
         #check for this first
         if(len(latest_frames)==32):
-            for item in latest_frames:
-                #extract each pickled heatmap, then unpickle it
-                heatmap_list.append(pickle.loads(item))
-        print(len(heatmap_list))
-        print(heatmap_list[0])
-
+            heatmap_list = []
+            for i in range(len(latest_frames)):
+                heatmap_list.append(pickle.loads(latest_frames.pop()))
+            heatmap_arr = np.array(heatmap_list)
+            horizontal_heatmap = np.stack(heatmap_arr[:, 0])
+            vertical_heatmap = np.stack(heatmap_arr[:, 1])
+            horizontal_heatmap = np.reshape(horizontal_heatmap, (1,32,57,28,1))
+            vertical_heatmap = np.reshape(vertical_heatmap, (1,32,37,28,1))
+            model_input = ((horizontal_heatmap, vertical_heatmap), ())
+            start = time.time()
+            predictions = loaded_model.predict(model_input)
+            end = time.time()
+            print(end - start)
+           
+        else:
+            #if less than 32 items we want to reuse the old heatmap_list and simply knock off the old entries and 
+            #slice in the new ones. 
+            #here, slice the beginning frame off the heatmap_list to make room for appending the new ones. 
+            heatmap_list = heatmap_list[len(latest_frames):]
+            for i in range(len(latest_frames)):
+                heatmap_list.append(pickle.loads(latest_frames.pop()))
+            heatmap_arr = np.array(heatmap_list)
+            horizontal_heatmap = np.stack(heatmap_arr[:, 0])
+            vertical_heatmap = np.stack(heatmap_arr[:, 1])
+            horizontal_heatmap = np.reshape(horizontal_heatmap, (1,32,57,28,1))
+            vertical_heatmap = np.reshape(vertical_heatmap, (1,32,37,28,1))
+            model_input = ((horizontal_heatmap, vertical_heatmap), ())
+            start = time.time()
+            predictions = loaded_model.predict(model_input)
+            end = time.time()
+            print(end - start)  
+        
         """
         #Was used to log the arrays and check for frame numbering continuity
         for item in passTest:
@@ -159,6 +201,14 @@ def inference_machine(nano_serv, cross_process_signal, cross_process_data):
 
 if __name__ == "__main__":
 
+    """
+    config = tf.compat.v1.ConfigProto()
+    config.gpu_options.allow_growth = True
+    session = tf.compat.v1.Session(config=config)
+
+    K.set_session(session)
+    """
+
     cross_process_signal = mp.Queue()
     cross_process_data = mp.JoinableQueue()
     received_data_queue = Qthread.Queue(5)
@@ -169,8 +219,9 @@ if __name__ == "__main__":
     pid = os.fork()
 
     if(pid):
+        time.sleep(30)
         red_blue_buffer(nano_serv, cross_process_signal, cross_process_data)
-    else:
+    else:  
         inference_machine(nano_serv, cross_process_signal, cross_process_data)
     
         """

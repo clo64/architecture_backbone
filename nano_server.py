@@ -12,14 +12,14 @@ class Nano_Server:
 
         #UDP Receiver 
         self.received_data_queue = received_data_queue
-        self.UDP_Receive_PORT = 15551
+        self.UDP_Receive_PORT = 17778
         self.receive_serversocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.receive_serversocket.bind((self.ip_addr, self.UDP_Receive_PORT))
 
         #UDP Sender
         self.send_data_queue = send_data_queue
         self.send_to_ip_addr = '10.0.0.43'
-        self.UDP_Send_PORT = 15556
+        self.UDP_Send_PORT = 15555
         self.send_serversocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         # No bind component for sender
         
